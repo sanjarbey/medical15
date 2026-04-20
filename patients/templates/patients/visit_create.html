@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <title>Yangi Tashrif - AI-HIS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .card { border: none; border-radius: 12px; transition: all 0.3s ease; }
+        .card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.05); }
+        .card-header { border-radius: 12px 12px 0 0 !important; font-weight: 600; letter-spacing: 0.5px; }
+        .form-label { font-weight: 500; color: #495057; font-size: 0.95rem; }
+        .form-control, .form-select { border-radius: 8px; border: 1px solid #ced4da; padding: 10px 15px; }
+        .form-control:focus, .form-select:focus { border-color: #4facfe; box-shadow: 0 0 0 0.25rem rgba(79, 172, 254, 0.25); }
+        .btn-gradient { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; border: none; border-radius: 8px; font-weight: 600; letter-spacing: 1px; }
+        .btn-gradient:hover { background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%); color: white; opacity: 0.9; }
+    
+     
+        /* Simptomlar uchun maxsus Grid dizayni */
+        .symptoms-grid {
+            display: grid;
+            /* Ekran hajmiga qarab avtomatik 3 yoki 4 ustunga bo'linadi */
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 12px;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            /* Ko'p simptom bo'lsa sahifa cho'zilib ketmasligi uchun scroll */
+            max-height: 350px; 
+            overflow-y: auto;
+        }
+        
+        .symptom-item {
+            display: flex;
+            align-items: center;
+            background: #f8f9fa;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #f1f3f5;
+            transition: background 0.2s;
+        }
+        
+        .symptom-item:hover { background: #e9ecef; }
+        .symptom-item input[type="checkbox"] { width: 18px; height: 18px; margin-right: 10px; cursor: pointer; }
+        .symptom-item label { cursor: pointer; user-select: none; margin-bottom: 0; color: #495057; width: 100%; font-size: 0.9rem;}
+    
+    
+    /* Simptomlar joylashuvi */
+.symptom-item {
+    display: flex;
+    flex-direction: column; /* Elementlarni tepadan pastga terish */
+    align-items: flex-start; /* Chap tomonga tekislash */
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+/* Checkbox va Yozuvni bir qatorda chiroyli saqlash */
+.symptom-header {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.symptom-header input[type="checkbox"] {
+    margin-right: 10px; /* Checkboxdan keyin o'ng tomonga joy tashlash */
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.symptom-header label {
+    margin-bottom: 0;
+    cursor: pointer;
+    font-weight: 500;
+    color: #495057;
+}
+
+/* Select box dizayni */
+.symptom-item select {
+    width: 100%; /* Select box qutini to'liq egallashi uchun */
+    border-radius: 6px;
+}
+    </style>
+</head>
+<body>
+
+<div class="container mt-5 mb-5" style="max-width: 900px;">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="text-dark fw-bold mb-0"><i class="bi bi-clipboard2-pulse text-primary me-2"></i>Qabul Oynasi</h2>
+            <p class="text-muted mt-1 mb-0">Bemor ma'lumotlarini va klinik qaydlarni kiriting</p>
+        </div>
+        <a href="{% url 'patient_list' %}" class="btn btn-outline-secondary px-4 rounded-pill"><i class="bi bi-arrow-left me-2"></i>Ro'yxatga qaytish</a>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="mb-0 text-primary"><i class="bi bi-person-badge me-2"></i>1. Umumiy Ma'lumotlar</h5>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <label class="form-label">Bemorni tanlang <span class="text-danger">*</span></label>
+                        <select name="patient" class="form-select bg-light" required>
+                            <option value="">-- Ro'yxatdan qidiring --</option>
+                            {% for p in patients %}
+                                <option value="{{ p.id }}">{{ p.last_name }} {{ p.first_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Mas'ul Shifokor <span class="text-danger">*</span></label>
+                        <select name="assigned_doctor" class="form-select bg-light" required>
+                            <option value="">-- Shifokorni belgilang --</option>
+                            {% for doc in doctors %}
+                                <option value="{{ doc.id }}" {% if request.user.id == doc.id %}selected{% endif %}>
+                                    Dr. {{ doc.last_name }} {{ doc.first_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="mb-0 text-success"><i class="bi bi-activity me-2"></i>2. Biometrik Ko'rsatkichlar</h5>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-4">
+                    <div class="col-md-3 col-6">
+                        <label class="form-label">Harorat (°C) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="bi bi-thermometer-half text-danger"></i></span>
+                            <input type="number" step="0.1" name="temperature" class="form-control" placeholder="36.6" required>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 col-6">
+                        <label class="form-label">Qon bosimi</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="bi bi-heart text-danger"></i></span>
+                            <input type="text" name="arterial_pressure" class="form-control" placeholder="120/80">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-2 col-6">
+                        <label class="form-label">Yurak urishi</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="bi bi-stopwatch text-warning"></i></span>
+                            <input type="number" name="heart_rate" class="form-control" placeholder="75">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-2 col-6">
+                        <label class="form-label">Vazni (kg)</label>
+                        <input type="number" step="0.1" name="weight" class="form-control" placeholder="70.5">
+                    </div>
+                    
+                    <div class="col-md-2 col-6">
+                        <label class="form-label">Bo'yi (sm)</label>
+                        <input type="number" step="0.1" name="height" class="form-control" placeholder="175">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+                    <div class="card-header bg-warning text-dark d-flex align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-clipboard2-pulse me-2"></i>3. Bemor Simptomlari</h5>
+                        <span class="badge bg-white text-dark ms-auto"> XGBoost AI tahlili uchun muhim</span>
+                    </div>
+                    <div class="card-body p-4 bg-light">
+                        <p class="text-muted small mb-3">
+                            <i class="bi bi-info-circle-fill text-warning me-1"></i> Bemor shikoyat qilayotgan simptomlarni belgilang. Bu AI modelining kasallik xavfini aniqlash aniqligini oshiradi.
+                        </p>
+                        
+                        <div class="symptoms-grid">
+                            {% for symptom in symptoms %}
+                                <div class="symptom-item">
+                                    <div class="symptom-header">
+                                        <input type="checkbox" id="symptom_{{ symptom.id }}" name="symptoms[]" value="{{ symptom.id }}">
+                                        <label for="symptom_{{ symptom.id }}">{{ symptom.name_uz }}</label>
+                                    </div>
+                                    
+                                    <select name="severities[]" class="form-select form-select-sm mt-2">
+                                        <option value="">- Darajasi -</option>
+                                        {% for sev_val, sev_name in severities %}
+                                            <option value="{{ sev_val }}">{{ sev_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        
+                    </div>
+                </div>
+
+        <div class="card">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-robot me-2"></i>4. AI Tahlil uchun Klinik Qaydlar</h5>
+                    <span class="badge bg-light text-primary">BioBERT NLP Moduli aktiv</span>
+                </div>
+                <div class="card-body p-4 bg-light">
+                    <p class="text-muted small mb-3">
+                        <i class="bi bi-info-circle-fill text-info me-1"></i> Bemorning shikoyatlarini oddiy so'zlar bilan yozing. Sun'iy intellekt matn ichidan raqamlar va holatlarni avtomatik ajratib oladi.
+                    </p>
+                    <textarea name="doctor_notes" class="form-control mb-4" rows="4" placeholder="Bemor 3 kundan beri qattiq bosh og'rig'i, ko'krak sanchishi va uyqusizlikdan shikoyat qilmoqda..."></textarea>
+                    
+                    <h6 class="fw-bold mb-3"><i class="bi bi-file-earmark-medical text-danger me-2"></i>Laboratoriya tahlillarini yuklash (PDF/Rasm)</h6>
+                    
+                    <div id="lab-uploads-container">
+                        <div class="row mb-3 lab-upload-row align-items-end">
+                            <div class="col-md-5">
+                                <label class="form-label small">Tahlil turi</label>
+                                <select name="lab_types[]" class="form-select">
+                                    <option value="qon">Qon tahlili</option>
+                                    <option value="peshob">Peshob (Siydik) tahlili</option>
+                                    <option value="rentgen">Rentgen / MRT xulosasi</option>
+                                    <option value="boshqa">Boshqa tahlillar</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small">Faylni tanlang</label>
+                                <input type="file" name="lab_files[]" class="form-control" accept=".pdf, .jpg, .png, .jpeg">
+                            </div>
+                            <div class="col-md-1">
+                                </div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addLabRow()">
+                        <i class="bi bi-plus-circle me-1"></i> Yana tahlil qo'shish
+                    </button>
+
+                </div>
+            </div>
+
+        <div class="text-end">
+            <button type="submit" class="btn btn-gradient btn-lg px-5 py-3 shadow">
+                <i class="bi bi-magic me-2"></i> Saqlash va AI Bashoratni Olish
+            </button>
+        </div>
+
+    </form>
+</div>
+
+
+<script>
+    function addLabRow() {
+        const container = document.getElementById('lab-uploads-container');
+        
+        // Yangi qator yaratish
+        const newRow = document.createElement('div');
+        newRow.className = 'row mb-3 lab-upload-row align-items-end';
+        
+        // Yangi qatorning ichki qismi (HTML)
+        newRow.innerHTML = `
+            <div class="col-md-5">
+                <select name="lab_types[]" class="form-select">
+                    <option value="qon">Qon tahlili</option>
+                    <option value="peshob">Peshob (Siydik) tahlili</option>
+                    <option value="rentgen">Rentgen / MRT xulosasi</option>
+                    <option value="boshqa">Boshqa tahlillar</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <input type="file" name="lab_files[]" class="form-control" accept=".pdf, .jpg, .png, .jpeg">
+            </div>
+            <div class="col-md-1">
+                <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="this.closest('.lab-upload-row').remove()">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        container.appendChild(newRow);
+    }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ patient.first_name }} - Profil</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<div class="container mt-5 mb-5">
+    <a href="{% url 'patient_list' %}" class="btn btn-outline-secondary mb-3">⬅ Ortga qaytish</a>
+    
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-primary">
+                <div class="card-header bg-primary text-white">Bemor Anketasi</div>
+                <div class="card-body">
+                    <h4>{{ patient.last_name }} {{ patient.first_name }}</h4>
+                    <p class="mb-1"><strong>Tug'ilgan sana:</strong> {{ patient.date_of_birth|date:"Y-m-d" }}</p>
+                    <p class="mb-1"><strong>Tizimga qo'shilgan:</strong> {{ patient.created_at|date:"Y-m-d" }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <h4 class="mb-3">Klinik tarix va AI Kognitiv Xulosasi</h4>
+            
+            {% for visit in patient.visits.all|dictsortreversed:"visit_date" %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light d-flex justify-content-between">
+                    <strong>Tashrif: {{ visit.visit_date|date:"Y-m-d H:i" }}</strong>
+                    <span>Vazni: {{ visit.weight }} kg | BMI: {{ visit.bmi }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <p class="mb-0"><strong>Harorat:</strong> {{ visit.temperature }} °C</p>
+                            <p class="mb-0"><strong>Jinsi:
+
+                            </strong> {{ visit.patient.gender }}</p>
+                        </div>
+                        <div class="col-6">
+                            <p class="mb-0"><strong>Qon bosimi (A/B):
+
+                            </strong> {{ visit.blood_pressure }}</p>
+                            <p class="mb-0"><strong>Yurak urishi:</strong> {{ visit.heart_rate }} zarba/daq</p>
+                        </div>
+                    </div>
+
+                    {% if visit.ai_prediction %}
+                    <div class="alert {% if visit.ai_prediction.diabetes_risk > 60 or visit.ai_prediction.hypertension_risk > 60 %}alert-danger{% elif visit.ai_prediction.diabetes_risk >= 30 %}alert-warning{% else %}alert-success{% endif %}">
+                        <h6 class="alert-heading">🤖 AI Kognitiv Tahlili:</h6>
+                        <p class="mb-1">{{ visit.ai_prediction.clinical_alert }}</p>
+                        <hr class="mt-1 mb-1">
+                        <small>
+                            <strong>Gipertoniya xavfi:</strong> {{ visit.ai_prediction.hypertension_risk }}% | 
+                            <strong>Diabet xavfi:</strong> {{ visit.ai_prediction.diabetes_risk }}%
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="alert alert-info">Bemor hali terapevt ko'rigida bo'lmagan.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

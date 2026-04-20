@@ -1,0 +1,47 @@
+{% extends 'base.html' %} {% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0"><i class="bi bi-pencil-square"></i> Bemorni tahrirlash</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        {% csrf_token %}
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label fw-bold">Familiyasi</label>
+                                <input type="text" name="last_name" class="form-control" value="{{ patient.last_name }}" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label fw-bold">Ismi</label>
+                                <input type="text" name="first_name" class="form-control" value="{{ patient.first_name }}" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label fw-bold">Otasining ismi</label>
+                                <input type="text" name="patronymic" class="form-control" value="{{ patient.patronymic }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Tug'ilgan sanasi</label>
+                                <input type="date" name="date_of_birth" class="form-control" value="{{ patient.date_of_birth|date:'Y-m-d' }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Jinsi</label>
+                                <select name="gender" class="form-select" required>
+                                    <option value="Erkak" {% if patient.gender == 'Erkak' %}selected{% endif %}>Erkak</option>
+                                    <option value="Ayol" {% if patient.gender == 'Ayol' %}selected{% endif %}>Ayol</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-end mt-3">
+                            <a href="{% url 'patient_list' %}" class="btn btn-secondary me-2">Bekor qilish</a>
+                            <button type="submit" class="btn btn-success"><i class="bi bi-save"></i> O'zgarishlarni saqlash</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

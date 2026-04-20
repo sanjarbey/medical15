@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <title>Analitika - AI-HIS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .card { border: none; border-radius: 12px; transition: all 0.3s; }
+        .card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.05); }
+        .stat-icon { width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+        .table-custom thead { background-color: #f8f9fa; color: #495057; }
+        .table-custom th, .table-custom td { padding: 15px; vertical-align: middle; }
+        .own-patient { border-left: 4px solid #0d6efd; background-color: #f8fbff; } /* O'zining bemorlari uchun maxsus chiziq */
+    </style>
+</head>
+<body>
+
+<div class="container-fluid py-4 px-lg-5">
+    <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded-3 shadow-sm">
+        <h3 class="m-0 text-primary fw-bold">
+            <i class="bi bi-bar-chart-fill me-2"></i> 
+            {% if is_patient %} Shaxsiy Salomatlik Oynasi {% else %} {{ dashboard_title }} {% endif %}
+        </h3>
+        <div>
+            <a href="{% url 'patient_list' %}" class="btn btn-outline-secondary rounded-pill me-2">
+                <i class="bi bi-arrow-left"></i> Ro'yxatga qaytish
+            </a>
+            <span class="badge bg-light text-dark border p-2 rounded-pill me-2">
+                <i class="bi bi-person-circle text-primary"></i> {{ request.user.first_name|default:request.user.username }}
+            </span>
+        </div>
+    </div>
+
+    {% if not is_patient %}
+    
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="stat-icon bg-primary bg-opacity-10 text-primary me-3"><i class="bi bi-people-fill"></i></div>
+                    <div><h6 class="text-muted mb-1">Noyob Bemorlar</h6><h3 class="mb-0 fw-bold">{{ total_patients }}</h3></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="stat-icon bg-success bg-opacity-10 text-success me-3"><i class="bi bi-clipboard2-check-fill"></i></div>
+                    <div><h6 class="text-muted mb-1">Jami Ko'riklar</h6><h3 class="mb-0 fw-bold">{{ total_visits }}</h3></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="stat-icon bg-warning bg-opacity-10 text-warning me-3"><i class="bi bi-heart-pulse-fill"></i></div>
+                    <div><h6 class="text-muted mb-1">HTN Xavfi (>60%)</h6><h3 class="mb-0 fw-bold">{{ high_risk_htn }} <small class="fs-6 text-muted">({{ htn_percent }}%)</small></h3></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="stat-icon bg-danger bg-opacity-10 text-danger me-3"><i class="bi bi-droplet-fill"></i></div>
+                    <div><h6 class="text-muted mb-1">Diabet Xavfi (>60%)</h6><h3 class="mb-0 fw-bold">{{ high_risk_dm }} <small class="fs-6 text-muted">({{ dm_percent }}%)</small></h3></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if critical_cases %}
+    <div class="alert alert-danger shadow-sm border-0 d-flex align-items-center mb-4">
+        <i class="bi bi-exclamation-triangle-fill fs-3 me-3"></i>
+        <div>
+            <h5 class="alert-heading mb-1 fw-bold">Zudlik bilan e'tibor talab etuvchi holatlar!</h5>
+            <span class="mb-0">So'nggi AI tahlillari asosida xavf guruhiga kiruvchi bemorlar aniqlandi. Ularning kartalariga kirib xulosa bilan tanishing.</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0 text-dark fw-bold"><i class="bi bi-table text-primary me-2"></i> Barcha Ko'riklar Tarixi</h5>
+            
+            <div class="d-flex gap-2">
+                <div class="input-group" style="width: 250px;">
+                    <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                    <input type="text" id="searchInput" class="form-control" placeholder="F.I.Sh bo'yicha qidirish...">
+                </div>
+                <div class="input-group" style="width: 200px;">
+                    <span class="input-group-text bg-light"><i class="bi bi-calendar-date"></i></span>
+                    <input type="date" id="dateFilter" class="form-control">
+                </div>
+                <button class="btn btn-outline-secondary" onclick="clearFilters()" title="Filtrni tozalash">
+                    <i class="bi bi-x-circle"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-custom mb-0" id="visitsTable">
+                    <thead>
+                        <tr>
+                            <th class="ps-4">Sana va Vaqt</th>
+                            <th>Bemor F.I.Sh</th>
+                            <th>Shifokor</th>
+                            <th>Qon bosimi</th>
+                            <th>Xulosa</th>
+                            <th class="text-end pe-4">Harakat</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for visit in table_visits %}
+                        <tr class="{% if visit.airecommendation.hypertension_risk > 70 or visit.airecommendation.diabetes_risk > 70 %}bg-danger-subtle text-danger fw-bold{% endif %}">
+                            <td class="ps-4 visit-date" data-date="{{ visit.visit_date|date:'Y-m-d' }}">
+                                <span class="fw-bold text-dark">{{ visit.visit_date|date:"d.m.Y" }}</span> <br>
+                                <small class="text-muted">{{ visit.visit_date|date:"H:i" }}</small>
+                            </td>
+                            <td class="visit-name fw-bold">
+                                {{ visit.patient.last_name }} {{ visit.patient.first_name }}
+                            </td>
+                            <td>
+                                {% if visit.doctor == request.user %}
+                                    <span class="badge bg-primary rounded-pill">Sizning qabul</span>
+                                {% elif visit.doctor %}
+                                    <span class="text-muted"><i class="bi bi-person"></i> {{ visit.doctor.first_name|default:visit.doctor.username }}</span>
+                                {% else %}
+                                    <span class="text-muted"><i class="bi bi-person-dash"></i> Noma'lum</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ visit.blood_pressure|default:"Kiritilmagan" }}</td>
+                            <td>
+                                {% if visit.airecommendation %}
+                                    <span class="badge {% if visit.airecommendation.hypertension_risk > 70 %}bg-danger{% else %}bg-success{% endif %}">
+                                        HTN: {{ visit.airecommendation.hypertension_risk }}%
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">Tahlil kutilmoqda</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end pe-4">
+                                <a href="{% url 'patient_detail' visit.patient.id %}" class="btn btn-sm btn-outline-primary rounded-pill px-3">Batafsil</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">Hozircha hech qanday ko'riklar tarixi yo'q.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {% endif %} {% if is_patient %}
+        <div class="alert alert-info shadow-sm">
+            <h4>Xush kelibsiz, {{ request.user.username }}!</h4>
+            <p>Salomatligingiz va tahlil natijalaringizni Bemorlar ro'yxati orqali "Kartani ochish" tugmasini bosib ko'rishingiz mumkin.</p>
+        </div>
+    {% endif %}
+
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const searchInput = document.getElementById("searchInput");
+        const dateFilter = document.getElementById("dateFilter");
+        const rows = document.querySelectorAll(".visit-row");
+
+        function filterTable() {
+            const searchText = searchInput.value.toLowerCase();
+            const filterDate = dateFilter.value; // YYYY-MM-DD
+
+            rows.forEach(row => {
+                const name = row.querySelector(".visit-name").textContent.toLowerCase();
+                const date = row.querySelector(".visit-date").getAttribute("data-date");
+                
+                const matchesSearch = name.includes(searchText);
+                const matchesDate = filterDate === "" || date === filterDate;
+
+                if (matchesSearch && matchesDate) {
+                    row.style.display = "";
+                } else {
+                    row.style.display = "none";
+                }
+            });
+        }
+
+        searchInput.addEventListener("keyup", filterTable);
+        dateFilter.addEventListener("change", filterTable);
+    });
+
+    function clearFilters() {
+        document.getElementById("searchInput").value = "";
+        document.getElementById("dateFilter").value = "";
+        document.getElementById("searchInput").dispatchEvent(new Event('keyup'));
+    }
+</script>
+
+</body>
+</html>
