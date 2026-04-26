@@ -3,6 +3,8 @@ from django.dispatch import receiver
 from .models import LabResult
 from .ocr_service import extract_data_from_pdf
 
+
+
 @receiver(post_save, sender=LabResult)
 def process_lab_pdf(sender, instance, created, **kwargs):
     if created and instance.file:

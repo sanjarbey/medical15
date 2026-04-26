@@ -1,19 +1,18 @@
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save
 from django.dispatch import receiver
-from patients.models import VisitSymptom, LabResult
+from patients.models import VisitSymptom
 from .services import get_ai_prediction
-from ai_service.models import Patient
-# Simptomlar o'zgarganda AI ni ishga tushirish
-@receiver(post_save, sender=VisitSymptom)
-@receiver(post_delete, sender=VisitSymptom)
-def trigger_ai_from_symptoms(sender, instance, **kwargs):
-    htn_prob, dm_prob = get_ai_prediction(instance)
-    instance.htn_risk = htn_prob
-    instance.dm_risk = dm_prob
-    instance.save()
 
-# YANGI: Laboratoriya natijasi (PDF) yuklanganda AI ni ishga tushirish
-@receiver(post_save, sender=LabResult)
-def trigger_ai_from_lab(sender, instance, **kwargs):
-    if instance.visit:
-        calculate_disease_risk(instance.visit)
+@receiver(post_save, sender=VisitSymptom)
+def trigger_ai_from_symptoms(sender, instance, created, **kwargs):
+    """
+    VisitSymptom bazaga yozilganda AI ni avtomatik ishga tushiradi.
+    """
+    # 1. Bashoratni olish
+    htn_prob, dm_prob = get_ai_prediction(instance)
+    
+    # 2. Bazani update orqali yangilash (post_save ni qayta chaqirmaydi!)
+    VisitSymptom.objects.filter(pk=instance.pk).update(
+        htn_risk=htn_prob,
+        dm_risk=dm_prob
+    )

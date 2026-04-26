@@ -26,42 +26,51 @@
             <h4 class="mb-3">Klinik tarix va AI Kognitiv Xulosasi</h4>
             
             {% for visit in patient.visits.all|dictsortreversed:"visit_date" %}
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-light d-flex justify-content-between">
-                    <strong>Tashrif: {{ visit.visit_date|date:"Y-m-d H:i" }}</strong>
-                    <span>Vazni: {{ visit.weight }} kg | BMI: {{ visit.bmi }}</span>
-                </div>
-                <div class="card-body">
-                    <div class="row mb-3">
-                        <div class="col-6">
-                            <p class="mb-0"><strong>Harorat:</strong> {{ visit.temperature }} °C</p>
-                            <p class="mb-0"><strong>Jinsi:
-
-                            </strong> {{ visit.patient.gender }}</p>
-                        </div>
-                        <div class="col-6">
-                            <p class="mb-0"><strong>Qon bosimi (A/B):
-
-                            </strong> {{ visit.blood_pressure }}</p>
-                            <p class="mb-0"><strong>Yurak urishi:</strong> {{ visit.heart_rate }} zarba/daq</p>
-                        </div>
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light d-flex justify-content-between">
+                        <strong>Tashrif: {{ visit.visit_date|date:"Y-m-d H:i" }}</strong>
+                        <span>Vazni: {{ visit.weight }} kg | BMI: {{ visit.bmi }}</span>
                     </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <p class="mb-0"><strong>Harorat:</strong> {{ visit.temperature }} °C</p>
+                                <p class="mb-0"><strong>Jinsi:</strong> {{ visit.patient.gender }}</p>
+                            </div>
+                            <div class="col-6">
+                                <p class="mb-0"><strong>Qon bosimi (A/B):</strong> 
+                                    {% if visit.blood_pressure %}
+                                        {{ visit.blood_pressure }}
+                                    {% endif %}
+                                </p>
+                                <p class="mb-0"><strong>Yurak urishi:</strong> {{ visit.heart_rate }} zarba/daq</p>
+                            </div>
+                        </div>
 
-                    {% if visit.ai_prediction %}
-                    <div class="alert {% if visit.ai_prediction.diabetes_risk > 60 or visit.ai_prediction.hypertension_risk > 60 %}alert-danger{% elif visit.ai_prediction.diabetes_risk >= 30 %}alert-warning{% else %}alert-success{% endif %}">
-                        <h6 class="alert-heading">🤖 AI Kognitiv Tahlili:</h6>
-                        <p class="mb-1">{{ visit.ai_prediction.clinical_alert }}</p>
-                        <hr class="mt-1 mb-1">
-                        <small>
-                            <strong>Gipertoniya xavfi:</strong> {{ visit.ai_prediction.hypertension_risk }}% | 
-                            <strong>Diabet xavfi:</strong> {{ visit.ai_prediction.diabetes_risk }}%
-                        </small>
+                        {% with symptom=visit.visitsymptom_set.first %}
+                            {% if symptom and symptom.htn_risk is not None %}
+                            <div class="alert {% if symptom.dm_risk > 60 or symptom.htn_risk > 60 %}alert-danger{% elif symptom.dm_risk >= 30 or symptom.htn_risk >= 30 %}alert-warning{% else %}alert-success{% endif %}">
+                                <h6 class="alert-heading">🤖 AI Kognitiv Tahlili:</h6>
+                                <p class="mb-1">
+                                    {% if symptom.htn_risk > 60 or symptom.dm_risk > 60 %}
+                                        Diqqat: Yuqori xavf aniqlandi! Shifokor nazorati tavsiya etiladi.
+                                    {% else %}
+                                        AI tahlili: Umumiy holat nazorat ostida.
+                                    {% endif %}
+                                </p>
+                                <hr class="mt-1 mb-1">
+                                <small>
+                                    <strong>Gipertoniya xavfi:</strong> {{ symptom.htn_risk }}% | 
+                                    <strong>Diabet xavfi:</strong> {{ symptom.dm_risk }}%
+                                </small>
+                            </div>
+                            {% endif %}
+                        {% endwith %}
+                        
                     </div>
-                    {% endif %}
                 </div>
-            </div>
-            {% empty %}
-            <div class="alert alert-info">Bemor hali terapevt ko'rigida bo'lmagan.</div>
+                {% empty %}
+                <div class="alert alert-info">Bemor hali terapevt ko'rigida bo'lmagan.</div>
             {% endfor %}
         </div>
     </div>

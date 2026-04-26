@@ -49,6 +49,10 @@ PATIENT_SYMPTOM_IMPACT_CHOICES = (
 class VisitSymptom(models.Model):
     visit = models.ForeignKey('Visit', on_delete=models.CASCADE)
     symptom = models.ForeignKey(Symptom, on_delete=models.CASCADE, verbose_name="Simptom")
+    blood_pressure = models.CharField(max_length=10, null=True, blank=True)
+    # AI bashoratlari uchun maydonlar
+    htn_risk = models.FloatField(null=True, blank=True)
+    dm_risk = models.FloatField(null=True, blank=True)
     # O'ZGARISH: Terapevt endi bemor holatiga qarab V1-V9 darajalaridan birini tanlaydi
     severity = models.DecimalField(
         max_digits=3, 
