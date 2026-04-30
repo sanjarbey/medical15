@@ -62,6 +62,15 @@ class VisitSymptom(models.Model):
         verbose_name="Bemordagi darajasi"
     )
 
+    # SHU QATORLARNI QO'SHING:
+    FEEDBACK_CHOICES = [
+        ('alo', "A'lo"),
+        ('yaxshi', "Yaxshi"),
+        ('qoniqarli', "Qoniqarli"),
+        ('yomon', "Yomon"),
+    ]
+    doctor_feedback = models.CharField(max_length=20, choices=FEEDBACK_CHOICES, null=True, blank=True)
+
     class Meta:
         unique_together = ('visit', 'symptom') 
 

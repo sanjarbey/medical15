@@ -1,23 +1,29 @@
-from django.contrib.auth.decorators import login_required # YANGI MODUL
+from django.contrib.auth.decorators import login_required
 from rest_framework import viewsets
-from .models import Patient, Visit, LabResult
-from .serializers import PatientSerializer, VisitSerializer, LabResultSerializer
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from .models import  Symptom, VisitSymptom, LabResult, PATIENT_SYMPTOM_IMPACT_CHOICES
-from django.db.models import Count,Case, When, Value, IntegerField, Q
-from ai_service.models import AIRecommendation # AI bazasini chaqirib olamiz
-from django.http import HttpResponseForbidden # YANGI
-from django.contrib.auth.models import User # Eng tepaga qo'shib qo'ying (agar yo'q bo'lsa)
+from django.db.models import Count, Case, When, Value, IntegerField, Q
+from django.http import HttpResponseForbidden, JsonResponse
+from django.contrib.auth.models import User
+import json
+
+# Loyiha modellari
+from .models import Patient, Visit, LabResult, Symptom, VisitSymptom, PATIENT_SYMPTOM_IMPACT_CHOICES
+from .serializers import PatientSerializer, VisitSerializer, LabResultSerializer
+from ai_service.models import AIRecommendation 
+
+# YANGI: AI servisini chaqirish
+from ai_service.services import get_ai_prediction 
+
 # Foydalanuvchi rolini aniqlab beruvchi yordamchi funksiya
 def get_user_role(user):
     if user.is_superuser:
         return 'Super Admin'
     if user.groups.exists():
         return user.groups.first().name
-    return 'Bemor' # Guruhlanmaganlar avtomat bemor hisoblanadi
+    return 'Bemor'
 
-
+# API ViewSets
 class PatientViewSet(viewsets.ModelViewSet):
     queryset = Patient.objects.all().order_by('-created_at')
     serializer_class = PatientSerializer
@@ -30,16 +36,11 @@ class LabResultViewSet(viewsets.ModelViewSet):
     queryset = LabResult.objects.all().order_by('-uploaded_at')
     serializer_class = LabResultSerializer
 
-
-
 @login_required 
 def patient_list_view(request):
     role = get_user_role(request.user)
-    
-    # Shifokor, Hamshira va Moderatorlar BARCHA bemorlarni ko'radi
     if role in ['Super Admin', 'Moderator', 'Shifokor', 'Hamshira']:
         patients = Patient.objects.all().order_by('-created_at')
-    # Bemor esa FAQAT O'ZINI ko'radi
     elif role == 'Bemor':
         patients = Patient.objects.filter(user=request.user)
     else:
@@ -52,25 +53,16 @@ def patient_detail_view(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
     role = get_user_role(request.user)
     
-    # Bemor birovning kartasiga kirishiga yo'l qo'ymaslik xavfsizligi
     if role == 'Bemor' and patient.user != request.user:
         return HttpResponseForbidden("Siz boshqa bemorning kartasini ko'ra olmaysiz!")
         
     return render(request, 'patients/patient_detail.html', {'patient': patient, 'user_role': role})
 
+
 @login_required
 def visit_create_view(request):
     role = get_user_role(request.user)
     
-    # Yangi tashrifni faqat Shifokor va Hamshira qo'sha oladi (Bemor yoki Moderator emas)
-    if role not in ['Super Admin', 'Shifokor', 'Hamshira']:
-        return HttpResponseForbidden("Sizda yangi tashrif yaratish huquqi yo'q!")
-    
-@login_required
-def visit_create_view(request):
-    role = get_user_role(request.user)
-    
-    # Yangi tashrifni faqat Shifokor va Hamshira qo'sha oladi
     if role not in ['Super Admin', 'Shifokor', 'Hamshira']:
         return HttpResponseForbidden("Sizda yangi tashrif yaratish huquqi yo'q!")
 
@@ -78,25 +70,19 @@ def visit_create_view(request):
         patient_id = request.POST.get('patient')
         patient = get_object_or_404(Patient, id=patient_id)
         
-        # YANGI QISM: Formadan hamshira tanlagan shifokorni qabul qilamiz
         assigned_doctor_id = request.POST.get('assigned_doctor')
         if assigned_doctor_id:
             assigned_doctor = User.objects.get(id=assigned_doctor_id)
         else:
-            assigned_doctor = request.user # Agar hech kim tanlanmasa, o'ziga yoziladi
+            assigned_doctor = request.user 
         
-        # ==========================================
-        # YANGI QO'SHILGAN QISM: Raqamlarni tozalash (Sanitization)
-        # ==========================================
         def clean_number(val, default_val=None):
             if not val:
                 return default_val
             try:
-                # Agar foydalanuvchi vergul kiritgan bo'lsa ham, nuqtaga o'zgartiramiz
                 return float(str(val).replace(',', '.').strip())
             except ValueError:
                 return default_val
-        # ==========================================
         
         # 1. Tashrif ma'lumotlarini saqlash
         visit = Visit.objects.create(
@@ -105,69 +91,75 @@ def visit_create_view(request):
             weight=clean_number(request.POST.get('weight')),
             height=clean_number(request.POST.get('height')),
             temperature=clean_number(request.POST.get('temperature'), 36.6),
-            blood_pressure=request.POST.get('arterial_pressure') or request.POST.get('blood_pressure', '120/80'), # <--- YANGI QATOR
+            blood_pressure=request.POST.get('arterial_pressure') or request.POST.get('blood_pressure', '120/80'),
             heart_rate=clean_number(request.POST.get('heart_rate'), 75.0),
             doctor_notes=request.POST.get('doctor_notes', '')
         )
         
-        # 2. Simptomlar va ularning darajalarini saqlash
+        # 2. Simptomlarni aylanib chiqib saqlash
         symptom_ids = request.POST.getlist('symptoms[]')
         severities = request.POST.getlist('severities[]')
         
         processed_symptoms = set() 
+        last_symptom = None # AI ishga tushishi uchun bitta simptom obyekti kerak
+        
         for s_id, sev in zip(symptom_ids, severities):
             if s_id and sev and s_id not in processed_symptoms:
-                VisitSymptom.objects.create(
+                vs = VisitSymptom.objects.create(
                     visit=visit,
                     symptom_id=s_id,
                     severity=sev
                 )
+                last_symptom = vs # Oxirgi yaratilgan simptomni ushlab qolamiz
                 processed_symptoms.add(s_id) 
                 
         # ==========================================
-        # 3. Bir nechta Laboratoriya fayllarini saqlash
+        # 3. AI HISOBLASH (Barcha pichkalar bazaga tushgandan so'ng)
         # ==========================================
-        # Formadan ro'yxat (list) ko'rinishida kelayotgan tahlil turlari va fayllarni ushlab olamiz
+        if last_symptom:
+            # AI endi bazadagi hamma belgilangan pichkalarni ko'ra oladi
+            htn_prob, dm_prob = get_ai_prediction(last_symptom)
+            
+            # Natijani shu tashrifdagi barcha simptom qatorlariga yozib qo'yamiz
+            VisitSymptom.objects.filter(visit=visit).update(
+                htn_risk=htn_prob,
+                dm_risk=dm_prob
+            )
+        # ==========================================
+
+        # 4. Laboratoriya fayllarini saqlash
         lab_types = request.POST.getlist('lab_types[]')
         lab_files = request.FILES.getlist('lab_files[]') 
 
-        # Agar hech bo'lmaganda 1 ta fayl yuklangan bo'lsa
         if lab_files:
-            # Fayllar va ularning turlarini juftlashtirib (zip) aylanib chiqamiz
             for test_type, uploaded_file in zip(lab_types, lab_files):
-                # Bo'sh qatorlar saqlanib qolmasligi uchun tekshiramiz
                 if uploaded_file:
                     LabResult.objects.create(
                         visit=visit,
-                        test_type=test_type,  # Masalan: 'qon', 'rentgen'
-                        file=uploaded_file    # Yuklangan PDF yoki rasm fayli
+                        test_type=test_type, 
+                        file=uploaded_file 
                     )
-        # ==========================================
             
         return redirect('patient_detail', pk=patient.id)
 
     # GET so'rovi (sahifa yangi ochilganda)
     patients = Patient.objects.all().order_by('last_name')
     symptoms = Symptom.objects.all().order_by('name_uz')
-    # print(symptoms)
-    # YANGI QISM: Faqatgina 'Shifokor' guruhidagi foydalanuvchilarni bazadan qidirib topish
     doctors = User.objects.filter(groups__name='Shifokor')
     
     return render(request, 'patients/visit_create.html', {
         'patients': patients,
         'symptoms': symptoms,
         'severities': PATIENT_SYMPTOM_IMPACT_CHOICES,
-        'doctors': doctors, # Shifokorlar ro'yxatini HTML ga uzatamiz
+        'doctors': doctors,
         'user_role': role
     })
-# patients/views.py faylidagi o'zgarishlar
+
 
 @login_required
 def dashboard_view(request):
     role = get_user_role(request.user)
-    # ==========================================
-    # 1. BEMOR UCHUN (Shaxsiy salomatlik)
-    # ==========================================
+    
     if role == 'Bemor':
         try:
             patient = Patient.objects.get(user=request.user)
@@ -195,32 +187,18 @@ def dashboard_view(request):
             }
             return render(request, 'patients/dashboard.html', context)
         except Patient.DoesNotExist:
-            return render(request, 'patients/dashboard.html', 
-                          {
-                              'is_patient': True, 
-                              'error': "Anketa topilmadi."
-                           }
-                          )
-        pass
+            return render(request, 'patients/dashboard.html', {'is_patient': True, 'error': "Anketa topilmadi."})
 
-    # ==========================================
-    # 2. XODIMLAR VA BOSHQARUVCHILAR UCHUN
-    # ==========================================
-    
-    # A) Super Admin va Moderator hamma narsani ko'radi
     if role in ['Super Admin', 'Moderator']:
         my_visits = Visit.objects.all()
         table_visits = Visit.objects.all().order_by('-visit_date')
         total_patients = Patient.objects.count()
         dashboard_title = "Boshqaruv Analitikasi (Umumiy)"
-        # critical_count = sum(1 for v in my_visits if v.htn_risk > 80 or v.dm_risk > 80)
     elif role in ['Shifokor', 'Hamshira']:
-        # Statistika uchun faqat o'zi ko'rgan bemorlar
         my_visits = Visit.objects.filter(doctor=request.user)
         total_patients = Patient.objects.filter(id__in=my_visits.values_list('patient_id', flat=True)).count()
         dashboard_title = f"Analitika va Bemorlar ({role})"
         
-        # JADVAL UCHUN: O'zining bemorlari eng tepada (is_mine=1), keyin boshqalar (is_mine=0), keyin sana bo'yicha
         table_visits = Visit.objects.annotate(
             is_mine=Case(
                 When(doctor=request.user, then=Value(1)),
@@ -228,7 +206,6 @@ def dashboard_view(request):
                 output_field=IntegerField(),
             )
         ).order_by('-is_mine', '-visit_date')
-        
     else:
         return HttpResponseForbidden("Xatolik! Kirish huquqi yo'q.")
 
@@ -254,49 +231,41 @@ def dashboard_view(request):
         'htn_percent': htn_percent,
         'dm_percent': dm_percent,
         'critical_cases': critical_cases,
-        'table_visits': table_visits, # YANGI: Jadval uchun maxsus saralangan ro'yxat
-        # 'critical_count': critical_count
+        'table_visits': table_visits,
     }
     return render(request, 'patients/dashboard.html', context)
+
 
 @login_required
 def patient_create_view(request):
     role = get_user_role(request.user)
     
-    # YANGI XAVFSIZLIK QULFI: Yangi bemorni faqat shu 4 ta rol vakillari qo'sha oladi
     if role not in ['Super Admin', 'Moderator', 'Shifokor', 'Hamshira']:
         return HttpResponseForbidden("Xatolik! Sizda yangi bemor ro'yxatga olish huquqi yo'q.")
 
     if request.method == 'POST':
-        # Formadan kelgan ma'lumotlarni o'qib olish
         first_name = request.POST.get('first_name')
         last_name = request.POST.get('last_name')
         patronymic = request.POST.get('patronymic')
         date_of_birth = request.POST.get('date_of_birth')
-        gender_val = request.POST.get('gender', 'Erkak') # Yangi qo'shilgan qator
+        gender_val = request.POST.get('gender', 'Erkak')
 
-        # Bazada yangi Bemor yaratish
-        new_patient = Patient.objects.create(
+        Patient.objects.create(
             first_name=first_name,
             last_name=last_name,
             patronymic=patronymic,
             date_of_birth=date_of_birth,
-            gender=gender_val  # <--- Shu qatorni qo'shish esdan chiqmasin
+            gender=gender_val 
         )
-        
-        # Bemor yaratilgach, uning shaxsiy kartasiga yo'naltirish
         return redirect('patient_list')
 
-    # GET so'rovi uchun (sahifa birinchi marta ochilganda)
     return render(request, 'patients/patient_create.html', {'user_role': role})
 
 
 @login_required
 def patient_edit_view(request, pk):
-    # 1. Tahrirlanmoqchi bo'lgan bemorni topib kelamiz
     patient = get_object_or_404(Patient, pk=pk)
 
-    # 2. Agar shifokor formani o'zgartirib "Saqlash" tugmasini bossa
     if request.method == 'POST':
         patient.first_name = request.POST.get('first_name')
         patient.last_name = request.POST.get('last_name')
@@ -304,13 +273,23 @@ def patient_edit_view(request, pk):
         patient.date_of_birth = request.POST.get('date_of_birth')
         patient.gender = request.POST.get('gender')
         
-        patient.save() # Yangi ma'lumotlarni bazaga yozamiz
-        
-        # Tahrirlab bo'lgach, bemorning shaxsiy profiliga qaytaramiz
+        patient.save() 
         return redirect('patient_detail', pk=patient.id)
 
-    # 3. Agar shunchaki sahifaga kirsa, eski ma'lumotlari bilan formani ochib beramiz
-    context = {
-        'patient': patient
-    }
-    return render(request, 'patients/patient_edit.html', context)
+    return render(request, 'patients/patient_edit.html', {'patient': patient})
+
+
+def save_ai_feedback(request, symptom_id):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            feedback_value = data.get('feedback')
+            
+            symptom = VisitSymptom.objects.get(id=symptom_id)
+            symptom.doctor_feedback = feedback_value
+            symptom.save(update_fields=['doctor_feedback'])
+            
+            return JsonResponse({"status": "success", "message": "Bahoyingiz saqlandi!"})
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+    return JsonResponse({"status": "invalid_method"}, status=405)

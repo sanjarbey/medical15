@@ -7,6 +7,8 @@
 </head>
 <body class="bg-light">
 
+{% csrf_token %}
+
 <div class="container mt-5 mb-5">
     <a href="{% url 'patient_list' %}" class="btn btn-outline-secondary mb-3">⬅ Ortga qaytish</a>
     
@@ -47,25 +49,37 @@
                             </div>
                         </div>
 
-                        {% with symptom=visit.visitsymptom_set.first %}
-                            {% if symptom and symptom.htn_risk is not None %}
-                            <div class="alert {% if symptom.dm_risk > 60 or symptom.htn_risk > 60 %}alert-danger{% elif symptom.dm_risk >= 30 or symptom.htn_risk >= 30 %}alert-warning{% else %}alert-success{% endif %}">
-                                <h6 class="alert-heading">🤖 AI Kognitiv Tahlili:</h6>
-                                <p class="mb-1">
-                                    {% if symptom.htn_risk > 60 or symptom.dm_risk > 60 %}
-                                        Diqqat: Yuqori xavf aniqlandi! Shifokor nazorati tavsiya etiladi.
-                                    {% else %}
-                                        AI tahlili: Umumiy holat nazorat ostida.
-                                    {% endif %}
-                                </p>
-                                <hr class="mt-1 mb-1">
-                                <small>
-                                    <strong>Gipertoniya xavfi:</strong> {{ symptom.htn_risk }}% | 
-                                    <strong>Diabet xavfi:</strong> {{ symptom.dm_risk }}%
-                                </small>
-                            </div>
-                            {% endif %}
-                        {% endwith %}
+                        {% with symptom=visit.visitsymptom_set.last %}
+    
+    {% if symptom and symptom.htn_risk is not None %}
+        <div class="alert {% if symptom.htn_risk > 60 or symptom.dm_risk > 60 %}alert-danger{% else %}alert-warning{% endif %}">
+            <h6 class="alert-heading">🤖 AI Kognitiv Tahlili:</h6>
+            <hr class="mt-1 mb-1">
+            <small>
+                <strong>Gipertoniya xavfi:</strong> {{ symptom.htn_risk }}% | 
+                <strong>Diabet xavfi:</strong> {{ symptom.dm_risk }}%
+            </small>
+        </div>
+    {% endif %}
+
+    {% if symptom and symptom.id %}
+        <hr class="mt-2 mb-2">
+        <div id="feedback-box-{{ symptom.id }}">
+            {% if not symptom.doctor_feedback %}
+                <p class="mb-2" style="font-size: 0.9em;"><strong>AI xulosasini baholang:</strong></p>
+                
+                <div class="d-flex gap-2">
+                    <button onclick="sendFeedback('{% url 'save_ai_feedback' symptom.id %}', {{ symptom.id }}, 'alo')" class="btn btn-sm btn-outline-success w-100">A'lo</button>
+                    <button onclick="sendFeedback('{% url 'save_ai_feedback' symptom.id %}', {{ symptom.id }}, 'yaxshi')" class="btn btn-sm btn-outline-primary w-100">Yaxshi</button>
+                    <button onclick="sendFeedback('{% url 'save_ai_feedback' symptom.id %}', {{ symptom.id }}, 'qoniqarli')" class="btn btn-sm btn-outline-warning w-100">Qoniqarli</button>
+                    <button onclick="sendFeedback('{% url 'save_ai_feedback' symptom.id %}', {{ symptom.id }}, 'yomon')" class="btn btn-sm btn-outline-danger w-100">Yomon</button>
+                </div>
+                
+            {% else %}
+                <span class="badge bg-info text-dark">Shifokor bahosi: {{ symptom.get_doctor_feedback_display }}</span>
+            {% endif %}
+        </div>
+    {% endif %} {% endwith %}
                         
                     </div>
                 </div>
@@ -75,6 +89,48 @@
         </div>
     </div>
 </div>
+
+<script>
+function sendFeedback(url, symptomId, feedbackValue) {
+    // 1. Sahifadagi formadan xavfsizlik (CSRF) tokenini qidirib topish
+    let csrfTokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (!csrfTokenInput) {
+        alert("Xatolik: CSRF token topilmadi! Sahifangizda forma yo'q bo'lishi mumkin.");
+        return;
+    }
+
+    // 2. Serverga (Django'ga) ma'lumot jo'natish
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfTokenInput.value  // Tokinni aniq olib jo'natamiz
+        },
+        body: JSON.stringify({
+            'feedback': feedbackValue
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Server xatosi yoki manzil topilmadi. Status: ' + response.status);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.status === 'success') {
+            // 3. Muvaffaqiyatli bo'lsa, tugmalarni yashirib, Rahmat xabarini chiqarish
+            let feedbackBox = document.getElementById(`feedback-box-${symptomId}`);
+            feedbackBox.innerHTML = `<span class="badge bg-success">Bahoyingiz saqlandi. Rahmat!</span>`;
+        } else {
+            alert("Xatolik yuz berdi: " + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Xato yuz berdi:', error);
+        alert("So'rov yuborishda muammo chiqdi. Iltimos F12 ni bosib 'Console' ni tekshiring.");
+    });
+}
+</script>
 
 </body>
 </html>

@@ -88,27 +88,49 @@ def get_ai_prediction(visit_symptom):
         print(f"Topilgan simptomlar: Chanqash={data['thirst']}, Siyish={data['frequent_urination']}, "
               f"Bosh og'rig'i={data['headache']}, Holsizlik={data['fatigue']}")
 
+        # ... (yuqoridagi kodlar o'zgarishsiz qoladi) ...
         # 5. Model kutayotgan barcha 38 ta ustunni to'ldirish
         df = pd.DataFrame([data])
         for col in feature_cols:
             if col not in df.columns:
-                df[col] = 0  # Biz kiritmagan ustunlarni 0 (yo'q) deb qabul qilish
+                df[col] = 0
 
-        # Ustunlarni AI modeli o'qitilgan aniq tartibda joylashtirish
+        # Ustunlarni aniq tartibda joylashtirish
         input_df = df[feature_cols]
 
-        # 6. Ehtimollikni (Bashoratni) hisoblash
-        htn_pred = model_htn.predict_proba(input_df)
-        dm_pred = model_dm.predict_proba(input_df)
+        # ==========================================
+        # 6. EHTIMOLLIKNI VA FOIZNI HISOBLASH (YANGILANGAN QISM)
+        # ==========================================
+        try:
+            # Model orqali ehtimollikni (probability) olish
+            htn_pred = model_htn.predict_proba(input_df)
+            dm_pred = model_dm.predict_proba(input_df)
 
-        htn_prob = float(htn_pred[0][1])
-        dm_prob = float(dm_pred[0][1])
+            # Massivdan kasallik mavjudligi (1-sinf) ehtimolini olish
+            # float() ga o'tkazish NumPy ma'lumot turidan toza Python raqamiga o'tkazadi
+            htn_prob = float(htn_pred[0][1])
+            dm_prob = float(dm_pred[0][1])
 
-        print(f"Bashorat natijasi: Gipertoniya(HTN) = {htn_prob*100:.2f}%, Diabet(DM) = {dm_prob*100:.2f}%")
+        except IndexError:
+            # Agar predict_proba to'g'ri massiv qaytarmasa (yoki faqat 1 ta sinf bo'lsa)
+            print("OGOHLANTIRISH: Model indeksida xatolik, ehtimollik o'rniga aniq qiymat olinmoqda.")
+            htn_prob = float(model_htn.predict(input_df)[0])
+            dm_prob = float(model_dm.predict(input_df)[0])
+            
+        except Exception as e:
+            print(f"FOIZ HISOBLASHDA XATOLIK: {e}")
+            htn_prob = 0.0
+            dm_prob = 0.0
+
+        # Foizlarni hisoblash: 0.8543 -> 85.43%
+        htn_percentage = round(htn_prob * 100, 2)
+        dm_percentage = round(dm_prob * 100, 2)
+
+        print(f"Yakuniy hisoblangan foiz: HTN={htn_percentage}%, DM={dm_percentage}%")
         print("---------------------------\n")
 
-    except Exception as e:
-        print(f"AI XATOLIGI (get_ai_prediction): {e}")
+        return htn_percentage, dm_percentage
 
-    # Foiz ko'rinishida yaxlitlab qaytarish (masalan: 0.854 -> 85.4)
-    return round(htn_prob * 100, 2), round(dm_prob * 100, 2)
+    except Exception as e:
+        print(f"AI ASOSIY XATOLIGI (get_ai_prediction): {e}")
+        return 0.0, 0.0
